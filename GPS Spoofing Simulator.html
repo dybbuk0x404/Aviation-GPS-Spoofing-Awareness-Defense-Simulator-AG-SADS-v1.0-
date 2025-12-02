@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AG-SADS | Aviation GPS Spoofing Defense</title>
+    
+    <!-- LIBRARIES -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- CUSTOM CONFIG -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            black: '#0a0a0a',
+                            dark: '#111827',
+                            panel: '#1f2937',
+                            green: '#00ff41',
+                            red: '#ff0033',
+                            blue: '#00ccff'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['Courier New', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #00ccff; }
+        
+        /* CRT Scanline Effect */
+        .scanlines {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            position: fixed; pointer-events: none; top: 0; left: 0; right: 0; bottom: 0; z-index: 50; opacity: 0.3;
+        }
+        .glow-text { text-shadow: 0 0 10px rgba(0, 204, 255, 0.7); }
+        .glow-red { text-shadow: 0 0 10px rgba(255, 0, 51, 0.7); }
+        
+        /* Module Visibility Transition */
+        .module-section { display: none; animation: fadeIn 0.4s ease-in-out; }
+        .module-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        #map { height: 500px; width: 100%; z-index: 1; }
+        #canvas3d { height: 500px; width: 100%; }
+    </style>
+</head>
+<body class="bg-cyber-black text-gray-300 font-sans overflow-hidden">
+
+    <div class="scanlines"></div>
+
+    <!-- SIDEBAR -->
+    <div class="flex h-screen">
+        <aside class="w-64 bg-cyber-dark border-r border-gray-800 flex flex-col z-40">
+            <div class="p-6 border-b border-gray-800">
+                <h1 class="text-xl font-bold text-cyber-blue glow-text tracking-tighter">AG-SADS</h1>
+                <p class="text-xs text-gray-500 mt-1">Defense Simulator v1.0</p>
+                <div class="mt-2 text-xs text-cyber-green font-mono">By Dybbuk Research</div>
+            </div>
+
+            <nav class="flex-1 overflow-y-auto p-4 space-y-2">
+                <button onclick="showModule('dashboard')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-800 hover:text-white transition flex items-center group">
+                    <i class="fas fa-th-large w-6 group-hover:text-cyber-blue"></i> Dashboard
+                </button>
+                <div class="text-xs font-bold text-gray-600 uppercase mt-4 mb-2 pl-2">Simulation</div>
+                <button onclick="showModule('mod1')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-800 hover:text-white transition flex items-center group">
+                    <i class="fas fa-plane w-6 group-hover:text-cyber-green"></i> Live GPS Sim
+                </button>
+                <button onclick="showModule('mod4')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-800 hover:text-white transition flex items-center group">
+                    <i class="fas fa-gamepad w-6 group-hover:text-cyber-red"></i> Spoof Controller
+                </button>
+                <button onclick="showModule('mod7')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-800 hover:text-white transition flex items-center group">
+                    <i class="fas fa-cube w-6 group-hover:text-purple-400"></i> 3D Visualization
+                </button>
+
+                <div class="text-xs font-bold text-gray-600 uppercase mt-4 mb-2 pl-2">Analysis</div>
+                <button onclick="showModule('mod2')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-800 hover:text-white transition flex items-center group">
+                    <i class="fas fa-chart-line w-6 group-hover:text-yellow-400"></i> Algo Detection
+                </button>
+                <button onclick="showModule('mod6')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-800 hover:text-white transition flex items-center group">
+                    <i class="fas fa-brain w-6 group-hover:text-pink-400"></i> ML Detector
+                </button>
+
+                <div class="text-xs font-bold text-gray-600 uppercase mt-4 mb-2 pl-2">Intel</div>
+                <button onclick="showModule('mod3')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-800 hover:text-white transition flex items-center group">
+                    <i class="fas fa-graduation-cap w-6"></i> Training
+                </button>
+                <button onclick="showModule('mod5')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-800 hover:text-white transition flex items-center group">
+                    <i class="fas fa-file-alt w-6"></i> Threat Report
+                </button>
+            </nav>
+            
+            <div class="p-4 border-t border-gray-800 font-mono text-xs text-gray-500">
+                <div class="flex justify-between">
+                    <span>STATUS:</span>
+                    <span class="text-cyber-green">ONLINE</span>
+                </div>
+                <div class="flex justify-between mt-1">
+                    <span>LAT:</span>
+                    <span id="global-lat">34.0522</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="flex-1 overflow-y-auto bg-black p-8 relative">
+            
+            <!-- HOME / DASHBOARD -->
+            <section id="dashboard" class="module-section active">
+                <header class="mb-8">
+                    <h2 class="text-3xl font-bold text-white mb-2">Security Operations Center</h2>
+                    <p class="text-gray-400">Select a module to begin simulation or analysis.</p>
+                </header>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Cards -->
+                    <div onclick="showModule('mod1')" class="bg-cyber-panel border border-gray-700 p-6 rounded hover:border-cyber-blue cursor-pointer transition group">
+                        <div class="flex justify-between items-start mb-4">
+                            <i class="fas fa-plane text-3xl text-gray-600 group-hover:text-cyber-blue transition"></i>
+                            <span class="bg-blue-900 text-blue-200 text-xs px-2 py-1 rounded">SIMULATOR</span>
+                        </div>
+                        <h3 class="text-xl font-bold text-white">Live GPS Tracker</h3>
+                        <p class="text-sm text-gray-400 mt-2">Visual comparison of True vs Spoofed flight paths on real maps.</p>
+                    </div>
+
+                    <div onclick="showModule('mod2')" class="bg-cyber-panel border border-gray-700 p-6 rounded hover:border-cyber-blue cursor-pointer transition group">
+                        <div class="flex justify-between items-start mb-4">
+                            <i class="fas fa-wave-square text-3xl text-gray-600 group-hover:text-yellow-400 transition"></i>
+                            <span class="bg-yellow-900 text-yellow-200 text-xs px-2 py-1 rounded">MATH</span>
+                        </div>
+                        <h3 class="text-xl font-bold text-white">Anomaly Detection</h3>
+                        <p class="text-sm text-gray-400 mt-2">Real-time charts showing signal drift and euclidean distance errors.</p>
+                    </div>
+
+                    <div onclick="showModule('mod4')" class="bg-cyber-panel border border-gray-700 p-6 rounded hover:border-cyber-blue cursor-pointer transition group">
+                        <div class="flex justify-between items-start mb-4">
+                            <i class="fas fa-sliders-h text-3xl text-gray-600 group-hover:text-cyber-red transition"></i>
+                            <span class="bg-red-900 text-red-200 text-xs px-2 py-1 rounded">ATTACK</span>
+                        </div>
+                        <h3 class="text-xl font-bold text-white">Spoof Control Panel</h3>
+                        <p class="text-sm text-gray-400 mt-2">Inject false coordinates and manipulate altitude data.</p>
+                    </div>
+                    
+                    <div onclick="showModule('mod7')" class="bg-cyber-panel border border-gray-700 p-6 rounded hover:border-cyber-blue cursor-pointer transition group">
+                        <div class="flex justify-between items-start mb-4">
+                            <i class="fas fa-cubes text-3xl text-gray-600 group-hover:text-purple-400 transition"></i>
+                            <span class="bg-purple-900 text-purple-200 text-xs px-2 py-1 rounded">VISUALIZATION</span>
+                        </div>
+                        <h3 class="text-xl font-bold text-white">3D Flight Model</h3>
+                        <p class="text-sm text-gray-400 mt-2">Three.js render of aircraft deviation in 3D airspace.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MODULE 1: GPS SIMULATOR -->
+            <section id="mod1" class="module-section">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-cyber-green glow-text"> <i class="fas fa-satellite-dish"></i> GPS Spoofing Simulator</h2>
+                    <div class="flex gap-2">
+                        <span class="px-3 py-1 bg-gray-800 rounded border border-green-500 text-green-500 text-xs">REAL PATH</span>
+                        <span class="px-3 py-1 bg-gray-800 rounded border border-red-500 text-red-500 text-xs">SPOOFED PATH</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 bg-gray-900 rounded border border-gray-700 overflow-hidden relative">
+                        <div id="map"></div>
+                        <div id="spoof-alert" class="hidden absolute top-4 right-4 bg-red-600 text-white px-4 py-2 rounded shadow-lg animate-pulse font-bold border border-white">
+                            ⚠ SPOOFING DETECTED
+                        </div>
+                    </div>
+                    <div class="bg-cyber-panel p-4 rounded border border-gray-700 flex flex-col h-[500px]">
+                        <h3 class="text-white font-bold mb-2 border-b border-gray-600 pb-2">Flight Logs</h3>
+                        <div id="sim-logs" class="flex-1 overflow-y-auto font-mono text-xs space-y-1 text-gray-400">
+                            <!-- Logs go here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MODULE 2: ALGORITHM -->
+            <section id="mod2" class="module-section">
+                 <h2 class="text-2xl font-bold text-yellow-400 mb-6"> <i class="fas fa-chart-area"></i> Detection Algorithm Analysis</h2>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div class="bg-cyber-panel p-6 rounded border border-gray-700">
+                         <h3 class="text-white mb-4">Signal Drift Velocity</h3>
+                         <canvas id="driftChart"></canvas>
+                     </div>
+                     <div class="bg-cyber-panel p-6 rounded border border-gray-700">
+                         <h3 class="text-white mb-4">Positional Discrepancy (Euclidean)</h3>
+                         <div class="p-4 bg-gray-900 font-mono text-sm text-green-400 mb-4 rounded">
+                            Δd = √((x₂ - x₁)² + (y₂ - y₁)²)
+                         </div>
+                         <canvas id="diffChart"></canvas>
+                     </div>
+                 </div>
+            </section>
+
+            <!-- MODULE 3: TRAINING -->
+            <section id="mod3" class="module-section">
+                <div class="max-w-4xl mx-auto">
+                    <h2 class="text-3xl font-bold text-white mb-8 border-b border-gray-700 pb-4">GNSS Awareness Training</h2>
+                    
+                    <div class="space-y-6">
+                        <div class="bg-cyber-panel p-6 rounded border-l-4 border-blue-500">
+                            <h3 class="text-xl text-white font-bold mb-2">What is GPS Spoofing?</h3>
+                            <p class="text-gray-400">GPS spoofing occurs when a counterfeit radio signal is transmitted to overwrite the legitimate GPS satellite signal. Unlike jamming (which just blocks the signal), spoofing deceives the receiver into thinking it is in a different location or time.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-gray-800 p-6 rounded">
+                                <h4 class="text-white font-bold mb-2">Common Attack Vectors</h4>
+                                <ul class="list-disc list-inside text-gray-400 text-sm space-y-2">
+                                    <li>Software Defined Radios (SDR)</li>
+                                    <li>Portable signal generators</li>
+                                    <li>Meaconing (Re-broadcasting)</li>
+                                </ul>
+                            </div>
+                            <div class="bg-gray-800 p-6 rounded">
+                                <h4 class="text-white font-bold mb-2">Defense Mechanisms</h4>
+                                <ul class="list-disc list-inside text-gray-400 text-sm space-y-2">
+                                    <li>INS (Inertial Navigation) Fallback</li>
+                                    <li>Multi-Constellation (Galileo/GLONASS)</li>
+                                    <li>Signal Authentication (OSNMA)</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="bg-red-900/30 p-6 rounded border border-red-900">
+                            <h3 class="text-red-400 font-bold mb-2">Case Study: Black Sea Incidents</h3>
+                            <p class="text-gray-400 text-sm">In 2017, over 20 vessels in the Black Sea reported GPS positions showing them at an inland airport, miles away from the sea. This was a mass-scale spoofing event testing electronic warfare capabilities.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MODULE 4: CONTROL PANEL -->
+            <section id="mod4" class="module-section">
+                <h2 class="text-2xl font-bold text-red-500 mb-6 glow-red"> <i class="fas fa-crosshairs"></i> Attacker Control Panel (Simulation)</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="bg-cyber-panel p-6 rounded border border-red-900">
+                        <h3 class="text-white font-bold mb-6">Coordinate Injection</h3>
+                        
+                        <label class="block text-xs text-gray-500 mb-1">LATITUDE OFFSET</label>
+                        <input type="range" id="lat-spoof" min="-0.01" max="0.01" step="0.0001" value="0" class="w-full mb-4 accent-red-500">
+                        
+                        <label class="block text-xs text-gray-500 mb-1">LONGITUDE OFFSET</label>
+                        <input type="range" id="lon-spoof" min="-0.01" max="0.01" step="0.0001" value="0" class="w-full mb-6 accent-red-500">
+
+                        <button onclick="toggleSpoofing()" id="spoof-btn" class="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded shadow-[0_0_15px_rgba(255,0,0,0.5)] transition">
+                            ACTIVATE SPOOFING
+                        </button>
+                    </div>
+
+                    <div class="col-span-2 bg-black border border-gray-800 rounded p-4 relative flex items-center justify-center overflow-hidden">
+                        <!-- Radar decoration -->
+                        <div class="absolute w-[400px] h-[400px] border border-gray-800 rounded-full opacity-50"></div>
+                        <div class="absolute w-[200px] h-[200px] border border-gray-800 rounded-full opacity-50"></div>
+                        <div class="absolute w-[1px] h-full bg-green-900 opacity-50"></div>
+                        <div class="absolute w-full h-[1px] bg-green-900 opacity-50"></div>
+                        <div id="radar-line" class="absolute w-[200px] h-[200px] bg-gradient-to-r from-transparent to-green-900/40 rounded-full origin-bottom-left animate-spin" style="bottom:50%; left:50%; transform-origin: 0 100%;"></div>
+                        
+                        <div class="z-10 text-center">
+                            <h2 class="text-4xl font-mono text-gray-600 mb-2">DRIFT MONITOR</h2>
+                            <div id="drift-val" class="text-6xl font-mono text-green-500">0.00</div>
+                            <div class="text-xs text-gray-500 mt-2">METERS DEVIATION</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MODULE 5: THREAT REPORT -->
+            <section id="mod5" class="module-section">
+                <div class="bg-white text-black p-8 max-w-4xl mx-auto shadow-2xl min-h-[800px]">
+                    <div class="flex justify-between border-b-2 border-black pb-4 mb-6">
+                        <div>
+                            <h1 class="text-3xl font-bold">Threat Intelligence Report</h1>
+                            <p class="text-sm text-gray-600">Ref: AG-SADS-2025-001</p>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold">DYBBUK RESEARCH</div>
+                            <div class="text-xs">CLASSIFICATION: TLP:WHITE</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <h2 class="text-xl font-bold mb-2 uppercase border-l-4 border-red-600 pl-2">Executive Summary</h2>
+                        <p class="text-sm leading-relaxed mb-4">
+                            The aviation sector faces increasing risks from Global Navigation Satellite System (GNSS) interference. 
+                            Recent telemetry analysis indicates a 400% increase in spoofing events near conflict zones. 
+                            This report outlines the technical indicators of compromise (IoCs) and recommended mitigation strategies for Flight Operations Centers (FOCs).
+                        </p>
+                    </div>
+
+                    <div class="mb-6">
+                        <h2 class="text-xl font-bold mb-2 uppercase border-l-4 border-black pl-2">Incident Response Playbook</h2>
+                        <table class="w-full text-sm border-collapse border border-gray-300 mt-2">
+                            <tr class="bg-gray-200">
+                                <th class="border p-2 text-left">Phase</th>
+                                <th class="border p-2 text-left">Action</th>
+                            </tr>
+                            <tr>
+                                <td class="border p-2 font-bold">Identification</td>
+                                <td class="border p-2">Monitor "Loss of GNSS" alerts and inconsistent ADS-B velocity vectors.</td>
+                            </tr>
+                            <tr>
+                                <td class="border p-2 font-bold">Containment</td>
+                                <td class="border p-2">Instruct pilot to switch to Inertial/VOR navigation. Ignore GPS altitude.</td>
+                            </tr>
+                            <tr>
+                                <td class="border p-2 font-bold">Eradication</td>
+                                <td class="border p-2">Reset Flight Management Computer (FMC) once clear of jamming zone.</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div class="mt-8 text-center">
+                        <button class="bg-gray-900 text-white px-6 py-2 rounded hover:bg-gray-700">DOWNLOAD PDF VERSION</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MODULE 6: ML DETECTOR -->
+            <section id="mod6" class="module-section">
+                <h2 class="text-2xl font-bold text-pink-400 mb-6"> <i class="fas fa-brain"></i> Machine Learning Classifier</h2>
+                
+                <div class="bg-cyber-panel p-8 rounded border border-gray-700 text-center">
+                    <div class="border-2 border-dashed border-gray-600 rounded-lg p-12 mb-6 hover:border-pink-500 transition cursor-pointer" onclick="simulateML()">
+                        <i class="fas fa-file-csv text-4xl text-gray-500 mb-4"></i>
+                        <p class="text-gray-300">Drop Flight Log (CSV) or Click to Simulate Analysis</p>
+                    </div>
+
+                    <div id="ml-results" class="hidden text-left max-w-2xl mx-auto">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-gray-400">Model Confidence:</span>
+                            <span class="text-pink-400 font-bold">98.4%</span>
+                        </div>
+                        
+                        <div class="w-full bg-gray-700 h-4 rounded mb-2">
+                            <div class="bg-red-500 h-4 rounded" style="width: 85%"></div>
+                        </div>
+                        <p class="text-red-400 font-bold mb-6">RESULT: MALICIOUS SPOOFING DETECTED</p>
+
+                        <h4 class="text-white border-b border-gray-700 pb-2 mb-2">Feature Importance</h4>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span>Altitude Variance</span>
+                                <span class="text-blue-400">0.45</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Signal SNR Drop</span>
+                                <span class="text-blue-400">0.32</span>
+                            </div>
+                             <div class="flex justify-between">
+                                <span>Clock Drift</span>
+                                <span class="text-blue-400">0.15</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MODULE 7: 3D VIZ -->
+            <section id="mod7" class="module-section">
+                <h2 class="text-2xl font-bold text-purple-400 mb-6"> <i class="fas fa-cube"></i> Spatial Deviation (3D)</h2>
+                <div class="bg-black border border-gray-700 rounded overflow-hidden relative">
+                    <div id="canvas3d"></div>
+                    <div class="absolute bottom-4 left-4 bg-black/50 p-2 text-xs rounded pointer-events-none">
+                        <div class="flex items-center gap-2"><div class="w-3 h-3 bg-green-500"></div> True Path</div>
+                        <div class="flex items-center gap-2 mt-1"><div class="w-3 h-3 bg-red-500"></div> Spoofed Path</div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- GLOBAL STATE ---
+        let isSpoofing = false;
+        let map, trueMarker, spoofMarker, truePath, spoofPath;
+        let driftChart, diffChart;
+        let logs = [];
+        
+        // --- 1. NAVIGATION ---
+        function showModule(id) {
+            document.querySelectorAll('.module-section').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            
+            // Fix Leaflet resize issue when tab becomes visible
+            if(id === 'mod1' && map) setTimeout(() => map.invalidateSize(), 100);
+            
+            // Fix Three.js resize
+            if(id === 'mod7') setTimeout(() => onWindowResize(), 100);
+        }
+
+        // --- 2. LEAFLET MAP SIMULATION (Module 1) ---
+        function initMap() {
+            // Start at a generic airport location (e.g., LAX approach)
+            const startLat = 33.9416;
+            const startLng = -118.4085;
+
+            map = L.map('map').setView([startLat, startLng], 13);
+
+            // Dark Mode Tiles
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Icons
+            const planeIconGreen = L.divIcon({
+                html: '<i class="fas fa-plane text-green-500 text-2xl" style="transform: rotate(-45deg);"></i>',
+                className: 'bg-transparent',
+                iconSize: [30, 30]
+            });
+            const planeIconRed = L.divIcon({
+                html: '<i class="fas fa-plane text-red-500 text-2xl" style="transform: rotate(-45deg);"></i>',
+                className: 'bg-transparent',
+                iconSize: [30, 30]
+            });
+
+            trueMarker = L.marker([startLat, startLng], {icon: planeIconGreen}).addTo(map);
+            spoofMarker = L.marker([startLat, startLng], {icon: planeIconRed}).addTo(map);
+
+            truePath = L.polyline([], {color: '#00ff41'}).addTo(map);
+            spoofPath = L.polyline([], {color: '#ff0033', dashArray: '5, 10'}).addTo(map);
+            
+            startSimulationLoop(startLat, startLng);
+        }
+
+        function startSimulationLoop(lat, lng) {
+            let t = 0;
+            const logContainer = document.getElementById('sim-logs');
+
+            setInterval(() => {
+                t += 0.05;
+
+                // Physics: Plane moving west
+                let realLat = lat;
+                let realLng = lng - (t * 0.01);
+
+                // Spoof Logic
+                let spoofLat = realLat;
+                let spoofLng = realLng;
+
+                if (isSpoofing) {
+                    const latOffset = parseFloat(document.getElementById('lat-spoof').value);
+                    const lonOffset = parseFloat(document.getElementById('lon-spoof').value);
+                    
+                    // Add drift based on slider + slight noise
+                    spoofLat += latOffset + (Math.sin(t)*0.0002);
+                    spoofLng += lonOffset + (Math.cos(t)*0.0002);
+                    
+                    document.getElementById('spoof-alert').classList.remove('hidden');
+                    updateCharts(Math.abs(latOffset) + Math.abs(lonOffset)); // Update charts with drift
+                    document.getElementById('drift-val').innerText = (Math.abs(latOffset * 111000)).toFixed(2); // ~Meters
+                    document.getElementById('drift-val').classList.replace('text-green-500', 'text-red-500');
+                } else {
+                    document.getElementById('spoof-alert').classList.add('hidden');
+                    updateCharts(0);
+                    document.getElementById('drift-val').innerText = "0.00";
+                    document.getElementById('drift-val').classList.replace('text-red-500', 'text-green-500');
+                }
+
+                // Update Map
+                trueMarker.setLatLng([realLat, realLng]);
+                spoofMarker.setLatLng([spoofLat, spoofLng]);
+
+                truePath.addLatLng([realLat, realLng]);
+                spoofPath.addLatLng([spoofLat, spoofLng]);
+
+                if(truePath.getLatLngs().length > 100) {
+                    truePath.setLatLngs(truePath.getLatLngs().slice(-100));
+                    spoofPath.setLatLngs(spoofPath.getLatLngs().slice(-100));
+                }
+
+                map.panTo([realLat, realLng]);
+
+                // Update Logs
+                const time = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.innerHTML = `<span class="text-blue-400">[${time}]</span> LAT:${realLat.toFixed(4)} LON:${realLng.toFixed(4)} <span class="${isSpoofing ? 'text-red-500' : 'text-green-500'}">${isSpoofing ? 'ERR_POS_MISMATCH' : 'SIGNAL_OK'}</span>`;
+                logContainer.prepend(logEntry);
+                if(logContainer.children.length > 20) logContainer.lastChild.remove();
+
+                // 3D Update
+                update3D(realLat, realLng, spoofLat, spoofLng);
+
+            }, 1000);
+        }
+
+        // --- 3. SPOOF CONTROL (Module 4) ---
+        function toggleSpoofing() {
+            isSpoofing = !isSpoofing;
+            const btn = document.getElementById('spoof-btn');
+            if(isSpoofing) {
+                btn.innerText = "DEACTIVATE SPOOFING";
+                btn.classList.replace('bg-red-600', 'bg-green-600');
+            } else {
+                btn.innerText = "ACTIVATE SPOOFING";
+                btn.classList.replace('bg-green-600', 'bg-red-600');
+                // Reset sliders
+                document.getElementById('lat-spoof').value = 0;
+                document.getElementById('lon-spoof').value = 0;
+            }
+        }
+
+        // --- 4. CHARTS (Module 2) ---
+        function initCharts() {
+            const ctx1 = document.getElementById('driftChart').getContext('2d');
+            driftChart = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: Array(20).fill(''),
+                    datasets: [{ label: 'Signal Noise', data: Array(20).fill(0), borderColor: '#00ccff', tension: 0.4 }]
+                },
+                options: { animation: false, scales: { y: { min: 0, max: 1 } }, plugins: { legend: { display: false } } }
+            });
+
+            const ctx2 = document.getElementById('diffChart').getContext('2d');
+            diffChart = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: Array(20).fill(''),
+                    datasets: [{ label: 'Error (m)', data: Array(20).fill(0), backgroundColor: '#ff0033' }]
+                },
+                options: { animation: false, scales: { y: { min: 0, max: 200 } }, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function updateCharts(driftLevel) {
+            // Simulate noise logic
+            const noise = Math.random() * 0.1;
+            const val = driftLevel > 0 ? driftLevel * 10000 : noise; // Amplify drift for visual
+
+            const data1 = driftChart.data.datasets[0].data;
+            data1.shift();
+            data1.push(val > 1 ? 1 : val);
+            driftChart.update();
+
+            const data2 = diffChart.data.datasets[0].data;
+            data2.shift();
+            data2.push(driftLevel * 111000); // Rough degrees to meters
+            diffChart.update();
+        }
+
+        // --- 5. ML SIMULATION (Module 6) ---
+        function simulateML() {
+            const res = document.getElementById('ml-results');
+            res.classList.remove('hidden');
+            res.classList.add('animate-pulse');
+            setTimeout(() => res.classList.remove('animate-pulse'), 500);
+        }
+
+        // --- 6. THREE.JS 3D VIZ (Module 7) ---
+        let scene, camera, renderer, cubeReal, cubeSpoof;
+
+        function init3D() {
+            const container = document.getElementById('canvas3d');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0a);
+
+            camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(container.offsetWidth, container.offsetHeight);
+            container.appendChild(renderer.domElement);
+
+            // Grid
+            const gridHelper = new THREE.GridHelper(100, 100, 0x333333, 0x111111);
+            scene.add(gridHelper);
+
+            // Real Plane (Green Box)
+            const geometry = new THREE.BoxGeometry(1, 0.2, 1);
+            const materialGreen = new THREE.MeshBasicMaterial({ color: 0x00ff41, wireframe: true });
+            cubeReal = new THREE.Mesh(geometry, materialGreen);
+            scene.add(cubeReal);
+
+            // Spoofed Plane (Red Box)
+            const materialRed = new THREE.MeshBasicMaterial({ color: 0xff0033, wireframe: true });
+            cubeSpoof = new THREE.Mesh(geometry, materialRed);
+            scene.add(cubeSpoof);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        function update3D(rlat, rlng, slat, slng) {
+            if(!cubeReal || !cubeSpoof) return;
+            // Map 2D lat/lon changes to 3D X/Z changes (simplified)
+            // Just using the relative difference for visualization
+            
+            cubeReal.position.x = 0; 
+            cubeReal.position.z = 0; 
+
+            // Calculate offset for spoofed cube relative to real
+            const xDiff = (slng - rlng) * 1000; 
+            const zDiff = (slat - rlat) * 1000;
+
+            cubeSpoof.position.x = xDiff;
+            cubeSpoof.position.z = zDiff;
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas3d');
+            if(container && camera && renderer) {
+                camera.aspect = container.offsetWidth / container.offsetHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.offsetWidth, container.offsetHeight);
+            }
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = function() {
+            initMap();
+            initCharts();
+            init3D();
+            window.addEventListener('resize', onWindowResize);
+        };
+
+    </script>
+</body>
+</html>
+```
+
+
